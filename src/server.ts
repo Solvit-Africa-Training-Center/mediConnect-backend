@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDatabase } from './database/config/database';
 import './models'; // Import all models to establish associations
+import authRoutes from './routes/auth'; // adjust the path if needed
 
 // Load environment variables
 dotenv.config();
@@ -13,6 +14,9 @@ const PORT = process.env['PORT'] || 3000;
 // Basic middleware
 app.use(cors());
 app.use(express.json());
+
+// Mount auth routes
+app.use('/api/v1/auth', authRoutes);
 
 // Health check endpoint
 app.get('/health', (_req, res) => {
@@ -34,6 +38,17 @@ app.get('/api/v1', (_req, res) => {
     }
   });
 });
+
+// app.post('/api/v1', (_req, res) => {
+//   res.json({
+//     message: 'MedConnect API v1',
+//     status: 'Database models loaded and ready',
+//     endpoints: {
+//       health: '/health',
+//       api: '/api/v1/auth'
+//     }
+//   });
+// });
 
 // Start server
 const startServer = async () => {
