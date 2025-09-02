@@ -6,6 +6,14 @@ npm-debug.log*
 dist/
 build/
 
+# Coverage reports
+coverage/
+.coverage
+*.coverage
+htmlcov/
+.pytest_cache/
+.coverage.*
+
 # Environment variables
 .env
 .env.local
