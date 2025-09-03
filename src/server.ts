@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { connectDatabase } from "./database/config/database";
 import "./models";
 import { routers } from "./routes";
+import { swaggerRouter } from "./routes/swaggerRoutes";
 
 // Load environment variables
 dotenv.config();
@@ -26,6 +27,9 @@ app.get("/health", (_req, res) => {
 
 // API routes - Using the combined router
 app.use("/v1", routers);
+
+// Swagger routes (separate mount for docs at /api/v1/docs)
+app.use("/api/v1", swaggerRouter);
 
 // Basic API endpoint
 app.get("/api/v1", (_req, res) => {
@@ -51,6 +55,8 @@ const startServer = async () => {
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`🔗 API Base: http://localhost:${PORT}/api/v1`);
       console.log(`🔐 Auth API: http://localhost:${PORT}/api/v1/auth`);
+      console.log(`👥 Patient API: http://localhost:${PORT}/api/v1/patients`);
+      console.log(`📚 API Documentation: http://localhost:${PORT}/api/v1/docs`);
       console.log("🗄️ Database: Connected and models loaded");
     });
   } catch (error) {
