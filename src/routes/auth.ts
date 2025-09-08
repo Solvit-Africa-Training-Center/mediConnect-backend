@@ -9,8 +9,7 @@ import { UserRole } from "../models";
 
 const router = Router();
 
-// Public routes (no authentication required)
-router.post("/auth/register", AuthController.register);
+// Public routes - login only
 router.post("/auth/login", AuthController.login);
 
 // Protected routes
@@ -19,12 +18,6 @@ router.get(
   authenticateToken,
   requireRole([UserRole.DOCTOR, UserRole.ADMIN]),
   AuthController.getProfile
-);
-router.put(
-  "/auth/profile",
-  authenticateToken,
-  requireRole([UserRole.DOCTOR, UserRole.ADMIN]),
-  AuthController.updateProfile
 );
 router.put(
   "/auth/change-password",
