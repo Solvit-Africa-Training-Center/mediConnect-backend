@@ -1,20 +1,53 @@
 import { Request, Response } from 'express';
-import { PatientService, PatientRegistrationData, MedicalVisitData, PrescriptionData } from '../services/patientService';
+import { PatientService } from '../services/patientService';
 import { authenticateToken, requireRole } from '../middleware/auth';
 import { UserRole } from '../models';
+import { PatientRegistrationData, MedicalVisitData, PrescriptionData } from '../types';
 
 export class PatientController {
+
+  // Get all patients (doctor-only)
+static async getAllPatients (req: Request, res: Response) {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const offset = (pageNum - 1) * limitNum;
+
+    const patients = await PatientService.getAllPatients(limitNum, offset);
+
+    res.status(200).json({
+      success: true,
+      data: patients.patients,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: patients.total,
+        totalPages: Math.ceil(patients.total / limitNum),
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: {
+        message: error.message,
+        statusCode: 500,
+      },
+    });
+  }
+}
+
   // Patient registration
   static async registerPatient (req: Request, res: Response) {
     try {
       const data: PatientRegistrationData = req.body;
 
       // Basic validation
-      if (!data.email || !data.password || !data.fullName || !data.dateOfBirth || !data.gender) {
+      if (!data.email || !data.password || !data.fullName || !data.dateOfBirth || !data.gender || !data.emergencyContact || !data.emergencyPhone) {
         return res.status(400).json({
           success: false,
           error: {
-            message: 'Email, password, full name, date of birth, and gender are required',
+            message: 'Email, password, full name, date of birth, gender, emergency contact, and emergency phone are required',
             statusCode: 400,
           },
         });
@@ -63,10 +96,11 @@ export class PatientController {
         data: patient,
       });
     } catch (error: any) {
+      console.error('Patient registration error:', error);
       res.status(400).json({
         success: false,
         error: {
-          message: error.message,
+          message: error.message || 'Patient registration failed',
           statusCode: 400,
         },
       });
@@ -215,14 +249,23 @@ export class PatientController {
   static async createMedicalVisit (req: Request, res: Response) {
     try {
       const data: MedicalVisitData = req.body;
+      const patientId = req.params.patientId;
 
-      // Basic validation
-      if (!data.patientId || !data.doctorId || !data.visitDate || !data.visitType || !data.chiefComplaint) {
+      // Basic validation with specific field checking
+      const missingFields = [];
+      if (!patientId) missingFields.push('patientId');
+      if (!data.doctorId) missingFields.push('doctorId');
+      if (!data.visitDate) missingFields.push('visitDate');
+      if (!data.visitType) missingFields.push('visitType');
+      if (!data.chiefComplaint) missingFields.push('chiefComplaint');
+
+      if (missingFields.length > 0) {
         return res.status(400).json({
           success: false,
           error: {
-            message: 'Patient ID, doctor ID, visit date, visit type, and chief complaint are required',
+            message: `Missing required fields: ${missingFields.join(', ')}`,
             statusCode: 400,
+            missingFields: missingFields,
           },
         });
       }
@@ -239,7 +282,22 @@ export class PatientController {
         });
       }
 
-      const visit = await PatientService.createMedicalVisit(data);
+      // Visit type validation
+      const validVisitTypes = ['consultation', 'emergency', 'followup'];
+      if (!validVisitTypes.includes(data.visitType)) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: `Invalid visit type. Must be one of: ${validVisitTypes.join(', ')}`,
+            statusCode: 400,
+          },
+        });
+      }
+
+      const visit = await PatientService.createMedicalVisit({
+        ...data,
+        patientId: patientId,
+      });
 
       res.status(201).json({
         success: true,
@@ -247,10 +305,11 @@ export class PatientController {
         data: visit,
       });
     } catch (error: any) {
+      console.error('Medical visit creation error:', error);
       res.status(400).json({
         success: false,
         error: {
-          message: error.message,
+          message: error.message || 'Medical visit creation failed',
           statusCode: 400,
         },
       });
@@ -261,6 +320,7 @@ export class PatientController {
   static async getPatientMedicalHistory (req: Request, res: Response) {
     try {
       const { patientId } = req.params;
+      const user = (req as any).user; // Get authenticated user
 
       if (!patientId) {
         return res.status(400).json({
@@ -270,6 +330,21 @@ export class PatientController {
             statusCode: 400,
           },
         });
+      }
+
+      // Security check: Patients can only view their own medical history
+      if (user.role === UserRole.PATIENT) {
+        // Find the patient record for this user
+        const patient = await PatientService.getPatientByUserId(user.id);
+        if (!patient || patient.id !== patientId) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              message: 'Access denied: You can only view your own medical history',
+              statusCode: 403,
+            },
+          });
+        }
       }
 
       const history = await PatientService.getPatientMedicalHistory(patientId);
@@ -293,9 +368,10 @@ export class PatientController {
   static async createPrescription (req: Request, res: Response) {
     try {
       const data: PrescriptionData = req.body;
+      const patientId = req.params.patientId;
 
       // Basic validation
-      if (!data.patientId || !data.doctorId || !data.visitId || !data.diagnosis || !data.items || data.items.length === 0) {
+      if (!patientId || !data.doctorId || !data.visitId || !data.diagnosis || !data.items || data.items.length === 0) {
         return res.status(400).json({
           success: false,
           error: {
@@ -318,7 +394,10 @@ export class PatientController {
         }
       }
 
-      const prescription = await PatientService.createPrescription(data);
+      const prescription = await PatientService.createPrescription({
+        ...data,
+        patientId: patientId,
+      });
 
       res.status(201).json({
         success: true,
