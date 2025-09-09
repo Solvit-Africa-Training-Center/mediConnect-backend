@@ -1,6 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { UserRole } from '../models';
+import { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
+import { UserRole } from "../models";
 
 // Extend Request interface to include user
 export interface AuthenticatedRequest extends Request {
@@ -13,15 +13,19 @@ export interface AuthenticatedRequest extends Request {
 }
 
 // JWT verification middleware
-export const authenticateToken = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+export const authenticateToken = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
 
   if (!token) {
     res.status(401).json({
       success: false,
       error: {
-        message: 'Access token required',
+        message: "Access token required",
         statusCode: 401,
       },
     });
@@ -29,9 +33,9 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
   }
 
   try {
-    const secret = process.env['JWT_SECRET'];
+    const secret = process.env["JWT_SECRET"];
     if (!secret) {
-      throw new Error('JWT_SECRET not configured');
+      throw new Error("JWT_SECRET not configured");
     }
 
     const decoded = jwt.verify(token, secret) as any;
@@ -46,7 +50,7 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
     res.status(403).json({
       success: false,
       error: {
-        message: 'Invalid or expired token',
+        message: "Invalid or expired token",
         statusCode: 403,
       },
     });
@@ -54,37 +58,43 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
 };
 
 // Role-based access control middleware
-export const requireRole = (allowedRoles: UserRole | UserRole[]) => (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
-  if (!req.user) {
-    res.status(401).json({
-      success: false,
-      error: {
-        message: 'Authentication required',
-        statusCode: 401,
-      },
-    });
-    return;
-  }
+export const requireRole =
+  (allowedRoles: UserRole | UserRole[]) =>
+  (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        error: {
+          message: "Authentication required",
+          statusCode: 401,
+        },
+      });
+      return;
+    }
 
-  const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+    const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
 
-  if (!roles.includes(req.user.role)) {
-    res.status(403).json({
-      success: false,
-      error: {
-        message: 'Insufficient permissions',
-        statusCode: 403,
-      },
-    });
-    return;
-  }
+    if (!roles.includes(req.user.role)) {
+      res.status(403).json({
+        success: false,
+        error: {
+          message: "Insufficient permissions",
+          statusCode: 403,
+        },
+      });
+      return;
+    }
 
-  next();
-};
+    next();
+  };
 
 // Specific role middlewares
 export const requirePatient = requireRole(UserRole.PATIENT);
 export const requireDoctor = requireRole(UserRole.DOCTOR);
 export const requirePharmacist = requireRole(UserRole.PHARMACIST);
 export const requireAdmin = requireRole(UserRole.ADMIN);
-export const requireStaff = requireRole([UserRole.DOCTOR, UserRole.PHARMACIST, UserRole.ADMIN]);
+export const requireStaff = requireRole([
+  UserRole.DOCTOR,
+  UserRole.PHARMACIST,
+  UserRole.ADMIN,
+]);

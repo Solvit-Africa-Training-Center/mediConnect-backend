@@ -12,3 +12,4 @@ export * from './patient';
 
 // Doctor types
 export * from './doctor';
+

@@ -1,12 +1,12 @@
-import { Model, DataTypes, UUIDV4 } from 'sequelize';
-import { sequelize } from '../database/config/database';
-import bcrypt from 'bcryptjs';
+import { Model, DataTypes, UUIDV4 } from "sequelize";
+import { sequelize } from "../database/config/database";
+import bcrypt from "bcryptjs";
 
 export enum UserRole {
-  PATIENT = 'patient',
-  DOCTOR = 'doctor',
-  PHARMACIST = 'pharmacist',
-  ADMIN = 'admin'
+  PATIENT = "patient",
+  DOCTOR = "doctor",
+  PHARMACIST = "pharmacist",
+  ADMIN = "admin",
 }
 
 export interface UserAttributes {
@@ -17,15 +17,28 @@ export interface UserAttributes {
   fullName: string;
   phone?: string;
   isActive: boolean;
+  password?: string; // Virtual field for password during creation
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-export interface UserCreationAttributes extends Omit<UserAttributes, 'id' | 'passwordHash' | 'createdAt' | 'updatedAt'> {
-  password: string;
+export interface UserCreationAttributes
+  extends Omit<
+    UserAttributes,
+    "id" | "passwordHash" | "createdAt" | "updatedAt"
+  > {
+  password?: string;
+  passwordHash?: string;
 }
 
-class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
+export interface UserInstance extends User {
+  password?: string;
+}
+
+class User
+  extends Model<UserAttributes, UserCreationAttributes>
+  implements UserAttributes
+{
   public id!: string;
   public email!: string;
   public passwordHash!: string;
@@ -36,12 +49,15 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
+  // Virtual field for password during creation
+  public password?: string;
+
   // Instance methods
-  public async comparePassword (candidatePassword: string): Promise<boolean> {
+  public async comparePassword(candidatePassword: string): Promise<boolean> {
     return bcrypt.compare(candidatePassword, this.passwordHash);
   }
 
-  public async hashPassword (password: string): Promise<string> {
+  public async hashPassword(password: string): Promise<string> {
     const saltRounds = 12;
     return bcrypt.hash(password, saltRounds);
   }
@@ -84,11 +100,15 @@ User.init(
       allowNull: false,
       defaultValue: true,
     },
+    password: {
+      type: DataTypes.VIRTUAL,
+      allowNull: true,
+    },
   },
   {
     sequelize,
-    tableName: 'users',
-    modelName: 'User',
+    tableName: "users",
+    modelName: "User",
     hooks: {
       beforeCreate: async (user: User) => {
         const password = (user as any).password;
@@ -103,7 +123,7 @@ User.init(
         }
       },
     },
-  },
+  }
 );
 
 export default User;
