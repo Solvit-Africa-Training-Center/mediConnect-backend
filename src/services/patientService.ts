@@ -2,6 +2,8 @@ import { Patient, User, MedicalVisit, Prescription, PrescriptionItem, UserRole }
 import Doctor from '../models/Doctor';
 import { VisitType } from '../models/MedicalVisit';
 import { PrescriptionStatus } from '../models/Prescription';
+import { QRCodeService } from './qrCodeService';
+import { EmailService } from './emailService';
 import { 
   PatientRegistrationData, 
   PatientProfile, 
@@ -69,7 +71,7 @@ static async getAllPatients (limit: number = 10, offset: number = 0): Promise<{ 
       // Create user account first
       const user = await User.create({
         email: data.email,
-        password: hashedPassword,
+        passwordHash: hashedPassword,
         fullName: data.fullName,
         role: UserRole.PATIENT,
         phone: data.phone,
@@ -286,9 +288,15 @@ static async getAllPatients (limit: number = 10, offset: number = 0): Promise<{ 
     return visit;
   }
 
-  // Get patient medical history
-  static async getPatientMedicalHistory (patientId: string): Promise<any> {
-    const visits = await MedicalVisit.findAll({
+  // Get patient medical history with pagination
+  static async getPatientMedicalHistory (patientId: string, page: number = 1, limit: number = 10, type: 'visits' | 'prescriptions' | 'all' = 'all', sortBy: string = 'createdAt', sortOrder: 'ASC' | 'DESC' = 'DESC'): Promise<{ visits?: any[], prescriptions?: any[], total: number, pagination: any }> {
+    const offset = (page - 1) * limit;
+    let visits: any[] = [];
+    let prescriptions: any[] = [];
+    let total = 0;
+
+    if (type === 'visits' || type === 'all') {
+      const visitsResult = await MedicalVisit.findAndCountAll({
       where: { patientId },
       include: [
         {
@@ -301,10 +309,31 @@ static async getAllPatients (limit: number = 10, offset: number = 0): Promise<{ 
           }]
         },
       ],
-      order: [['visitDate', 'DESC']],
-    });
+        order: [[sortBy === 'visitDate' ? 'visitDate' : 'createdAt', sortOrder]],
+        limit: type === 'visits' ? limit : undefined,
+        offset: type === 'visits' ? offset : undefined,
+      });
 
-    const prescriptions = await Prescription.findAll({
+      visits = visitsResult.rows.map(visit => ({
+        id: visit.id,
+        visitDate: visit.visitDate,
+        visitType: visit.visitType,
+        chiefComplaint: visit.chiefComplaint,
+        symptoms: visit.symptoms,
+        diagnosis: visit.diagnosis,
+        treatmentNotes: visit.treatmentNotes,
+        recommendations: visit.recommendations,
+        doctor: (visit as any).doctor,
+        createdAt: visit.createdAt,
+      }));
+
+      if (type === 'visits') {
+        total = visitsResult.count;
+      }
+    }
+
+    if (type === 'prescriptions' || type === 'all') {
+      const prescriptionsResult = await Prescription.findAndCountAll({
       where: { patientId },
       include: [
         {
@@ -321,23 +350,12 @@ static async getAllPatients (limit: number = 10, offset: number = 0): Promise<{ 
           as: 'items',
         },
       ],
-      order: [['createdAt', 'DESC']],
-    });
+        order: [[sortBy === 'prescriptionNumber' ? 'prescriptionNumber' : 'createdAt', sortOrder]],
+        limit: type === 'prescriptions' ? limit : undefined,
+        offset: type === 'prescriptions' ? offset : undefined,
+      });
 
-    return {
-      visits: visits.map(visit => ({
-        id: visit.id,
-        visitDate: visit.visitDate,
-        visitType: visit.visitType,
-        chiefComplaint: visit.chiefComplaint,
-        symptoms: visit.symptoms,
-        diagnosis: visit.diagnosis,
-        treatmentNotes: visit.treatmentNotes,
-        recommendations: visit.recommendations,
-        doctor: (visit as any).doctor,
-        createdAt: visit.createdAt,
-      })),
-      prescriptions: prescriptions.map(prescription => ({
+      prescriptions = prescriptionsResult.rows.map(prescription => ({
         id: prescription.id,
         prescriptionNumber: prescription.prescriptionNumber,
         diagnosis: prescription.diagnosis,
@@ -346,7 +364,34 @@ static async getAllPatients (limit: number = 10, offset: number = 0): Promise<{ 
         items: (prescription as any).items,
         doctor: (prescription as any).doctor,
         createdAt: prescription.createdAt,
-      })),
+      }));
+
+      if (type === 'prescriptions') {
+        total = prescriptionsResult.count;
+      }
+    }
+
+    if (type === 'all') {
+      // For 'all' type, we need to get the total count of both visits and prescriptions
+      const [visitsCount, prescriptionsCount] = await Promise.all([
+        MedicalVisit.count({ where: { patientId } }),
+        Prescription.count({ where: { patientId } })
+      ]);
+      total = visitsCount + prescriptionsCount;
+    }
+
+    return {
+      visits: type === 'visits' || type === 'all' ? visits : undefined,
+      prescriptions: type === 'prescriptions' || type === 'all' ? prescriptions : undefined,
+      total,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: page < Math.ceil(total / limit),
+        hasPrevPage: page > 1
+      }
     };
   }
 
@@ -389,7 +434,7 @@ static async getAllPatients (limit: number = 10, offset: number = 0): Promise<{ 
 
     // Create prescription
     const prescription = await Prescription.create({
-      prescriptionNumber: String(await Prescription.generatePrescriptionNumber()), // Convert prescription number to string
+      prescriptionNumber: Prescription.generatePrescriptionNumber(), // Explicitly generate prescription number
       patientId: data.patientId,
       doctorId: doctor.id, // Use the actual doctor ID, not the input
       visitId: data.visitId,
@@ -411,12 +456,60 @@ static async getAllPatients (limit: number = 10, offset: number = 0): Promise<{ 
       });
     }
 
+    // Generate QR code for the prescription
+    try {
+      const qrResult = await QRCodeService.generateQRCode(prescription.id);
+      
+      // Update prescription with QR code hash
+      await prescription.update({
+        qrCodeHash: qrResult.qrHash
+      });
+
+      // Send email to patient with QR code
+      try {
+        const patientWithUser = await Patient.findByPk(data.patientId, {
+          include: [{ association: 'user' }]
+        });
+
+        if (patientWithUser && (patientWithUser as any).user) {
+          const emailData = {
+            patientName: (patientWithUser as any).user.fullName,
+            patientEmail: (patientWithUser as any).user.email,
+            prescriptionNumber: prescription.prescriptionNumber || '',
+            doctorName: (doctor as any).user.fullName,
+            diagnosis: prescription.diagnosis,
+            medicines: data.items.map(item => ({
+              name: item.medicineName,
+              dosage: item.dosage,
+              frequency: item.frequency,
+              quantity: item.quantity,
+              instructions: item.instructions
+            })),
+            qrCodeImage: qrResult.qrCodeImage,
+            qrHash: qrResult.qrHash,
+            expiresAt: qrResult.expiresAt.toISOString()
+          };
+
+          await EmailService.sendPrescriptionEmail(emailData);
+          console.log(`✅ Prescription email sent to ${(patientWithUser as any).user.email}`);
+        }
+      } catch (emailError) {
+        console.error('❌ Failed to send prescription email:', emailError);
+        // Don't throw error - prescription is still created successfully
+      }
+    } catch (qrError) {
+      console.error('❌ Failed to generate QR code:', qrError);
+      // Don't throw error - prescription is still created successfully
+    }
+
     return prescription;
   }
 
-  // Get patient prescriptions
-  static async getPatientPrescriptions (patientId: string): Promise<any[]> {
-    const prescriptions = await Prescription.findAll({
+  // Get patient prescriptions with pagination
+  static async getPatientPrescriptions (patientId: string, page: number = 1, limit: number = 10, sortBy: string = 'createdAt', sortOrder: 'ASC' | 'DESC' = 'DESC'): Promise<{ prescriptions: any[], total: number }> {
+    const offset = (page - 1) * limit;
+    
+    const { count, rows: prescriptions } = await Prescription.findAndCountAll({
       where: { patientId },
       include: [
         {
@@ -433,10 +526,12 @@ static async getAllPatients (limit: number = 10, offset: number = 0): Promise<{ 
           as: 'items',
         },
       ],
-      order: [['createdAt', 'DESC']],
+      order: [[sortBy, sortOrder]],
+      limit,
+      offset,
     });
 
-    return prescriptions.map(prescription => ({
+    const prescriptionData = prescriptions.map(prescription => ({
       id: prescription.id,
       prescriptionNumber: prescription.prescriptionNumber,
       diagnosis: prescription.diagnosis,
@@ -446,6 +541,11 @@ static async getAllPatients (limit: number = 10, offset: number = 0): Promise<{ 
       doctor: (prescription as any).doctor,
       createdAt: prescription.createdAt,
     }));
+
+    return {
+      prescriptions: prescriptionData,
+      total: count,
+    };
   }
 
   // Search patients by name or reference number

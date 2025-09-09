@@ -1,31 +1,24 @@
-import { Request, Response } from "express";
-import { AuthService } from "../services/authService";
-import { AuthenticatedRequest } from "../middleware/auth";
-import { UserRole } from "../models";
-import { LoginCredentials, ChangePasswordData } from "../types";
+import { Request, Response } from 'express';
+import { AuthService } from '../services/authService';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { UserRole } from '../models';
+import { LoginCredentials, ChangePasswordData } from '../types';
+import { validateBody } from '../middleware/validation';
+import { userLoginSchema, passwordChangeSchema } from '../validation/schemas';
 
 export class AuthController {
+
+
   // User login
-  static async login(req: Request, res: Response) {
+  static async login (req: Request, res: Response) {
     try {
       const credentials: LoginCredentials = req.body;
-
-      // Basic validation
-      if (!credentials.email || !credentials.password) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            message: "Email and password are required",
-            statusCode: 400,
-          },
-        });
-      }
 
       const result = await AuthService.login(credentials);
 
       res.status(200).json({
         success: true,
-        message: "Login successful",
+        message: 'Login successful',
         data: result,
       });
     } catch (error: any) {
@@ -40,13 +33,13 @@ export class AuthController {
   }
 
   // Get user profile
-  static async getProfile(req: AuthenticatedRequest, res: Response) {
+  static async getProfile (req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.user) {
         return res.status(401).json({
           success: false,
           error: {
-            message: "Authentication required",
+            message: 'Authentication required',
             statusCode: 401,
           },
         });
@@ -69,14 +62,15 @@ export class AuthController {
     }
   }
 
+
   // Change password
-  static async changePassword(req: AuthenticatedRequest, res: Response) {
+  static async changePassword (req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.user) {
         return res.status(401).json({
           success: false,
           error: {
-            message: "Authentication required",
+            message: 'Authentication required',
             statusCode: 401,
           },
         });
@@ -84,32 +78,7 @@ export class AuthController {
 
       const { currentPassword, newPassword } = req.body;
 
-      if (!currentPassword || !newPassword) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            message: "Current password and new password are required",
-            statusCode: 400,
-          },
-        });
-      }
-
-      // Password strength validation
-      if (newPassword.length < 6) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            message: "New password must be at least 6 characters long",
-            statusCode: 400,
-          },
-        });
-      }
-
-      const result = await AuthService.changePassword(
-        req.user.id,
-        currentPassword,
-        newPassword
-      );
+      const result = await AuthService.changePassword(req.user.id, currentPassword, newPassword);
 
       res.status(200).json({
         success: true,
@@ -127,13 +96,13 @@ export class AuthController {
   }
 
   // Admin: Deactivate user
-  static async deactivateUser(req: AuthenticatedRequest, res: Response) {
+  static async deactivateUser (req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.user) {
         return res.status(401).json({
           success: false,
           error: {
-            message: "Authentication required",
+            message: 'Authentication required',
             statusCode: 401,
           },
         });
@@ -145,7 +114,7 @@ export class AuthController {
         return res.status(400).json({
           success: false,
           error: {
-            message: "User ID is required",
+            message: 'User ID is required',
             statusCode: 400,
           },
         });
@@ -169,13 +138,13 @@ export class AuthController {
   }
 
   // Admin: Reactivate user
-  static async reactivateUser(req: AuthenticatedRequest, res: Response) {
+  static async reactivateUser (req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.user) {
         return res.status(401).json({
           success: false,
           error: {
-            message: "Authentication required",
+            message: 'Authentication required',
             statusCode: 401,
           },
         });
@@ -187,7 +156,7 @@ export class AuthController {
         return res.status(400).json({
           success: false,
           error: {
-            message: "User ID is required",
+            message: 'User ID is required',
             statusCode: 400,
           },
         });
