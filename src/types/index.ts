@@ -2,7 +2,14 @@
 // This file provides a single entry point for all type definitions
 
 // Common types and enums
-export * from "./common";
+export * from './common';
 
 // Authentication types
-export * from "./auth";
+export * from './auth';
+
+// Patient types
+export * from './patient';
+
+// Doctor types
+export * from './doctor';
+

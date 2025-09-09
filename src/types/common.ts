@@ -1,25 +1,25 @@
 // Common types and enums used across the application
 
 export enum UserRole {
-  ADMIN = "admin",
-  DOCTOR = "doctor",
-  PATIENT = "patient",
-  PHARMACIST = "pharmacist",
+  ADMIN = 'admin',
+  DOCTOR = 'doctor',
+  PATIENT = 'patient',
+  PHARMACIST = 'pharmacist',
 }
 
 export enum VisitType {
-  CONSULTATION = "consultation",
-  EMERGENCY = "emergency",
-  FOLLOWUP = "followup",
+  CONSULTATION = 'consultation',
+  EMERGENCY = 'emergency',
+  FOLLOWUP = 'followup',
 }
 
 export enum PrescriptionStatus {
-  PENDING = "pending",
-  FILLED = "filled",
-  CANCELLED = "cancelled",
+  PENDING = 'pending',
+  FILLED = 'filled',
+  CANCELLED = 'cancelled',
 }
 
-export type Gender = "male" | "female" | "other";
+export type Gender = 'male' | 'female' | 'other';
 
 // Common API response structure
 export interface ApiResponse<T = any> {
