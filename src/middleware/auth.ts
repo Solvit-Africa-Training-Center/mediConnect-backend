@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { UserRole } from "../models";
+import { UserRole, TokenBlacklist } from "../models";
 
 // Extend Request interface to include user
 export interface AuthenticatedRequest extends Request {
@@ -13,11 +13,11 @@ export interface AuthenticatedRequest extends Request {
 }
 
 // JWT verification middleware
-export const authenticateToken = (
+export const authenticateToken = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
-): void => {
+): Promise<void> => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
 
@@ -33,6 +33,24 @@ export const authenticateToken = (
   }
 
   try {
+    // Check if token is blacklisted
+    try {
+      const isBlacklisted = await TokenBlacklist.isTokenBlacklisted(token);
+      if (isBlacklisted) {
+        res.status(403).json({
+          success: false,
+          error: {
+            message: "Token has been revoked",
+            statusCode: 403,
+          },
+        });
+        return;
+      }
+    } catch (blacklistError) {
+      // If blacklist check fails, log error but continue with normal JWT validation
+      console.warn("Token blacklist check failed:", blacklistError);
+    }
+
     const secret = process.env["JWT_SECRET"];
     if (!secret) {
       throw new Error("JWT_SECRET not configured");
